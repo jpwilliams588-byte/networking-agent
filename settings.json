@@ -1,0 +1,297 @@
+{
+  "research_questions": [
+    {
+      "question": "What prevents private markets from becoming accessible to everyday investors?",
+      "priority": 10
+    },
+    {
+      "question": "How do successful marketplaces create network effects?",
+      "priority": 10
+    },
+    {
+      "question": "How do marketplaces overcome the cold-start problem?",
+      "priority": 10
+    },
+    {
+      "question": "How do secondary market liquidity models work?",
+      "priority": 10
+    },
+    {
+      "question": "How is trust built in investment marketplaces?",
+      "priority": 10
+    },
+    {
+      "question": "How do retail investors make investment decisions?",
+      "priority": 10
+    },
+    {
+      "question": "What drives retail investor engagement and retention?",
+      "priority": 10
+    },
+    {
+      "question": "What SEC trends are shaping the future of retail investing?",
+      "priority": 10
+    },
+    {
+      "question": "How is retail investor protection evolving?",
+      "priority": 10
+    },
+    {
+      "question": "How are prices and valuations determined in private marketplaces?",
+      "priority": 10
+    },
+    {
+      "question": "Why have secondary markets remained relatively niche?",
+      "priority": 10
+    },
+    {
+      "question": "What would need to happen for private-company liquidity to become mainstream?",
+      "priority": 10
+    },
+    {
+      "question": "What are the biggest mistakes secondary marketplaces have made?",
+      "priority": 10
+    },
+    {
+      "question": "Why have some secondary platforms scaled while others stalled? What are the failed attempts and why?",
+      "priority": 10
+    },
+    {
+      "question": "How do founders feel about retail investors participating in private markets?",
+      "priority": 10
+    },
+    {
+      "question": "What are the biggest trust barriers facing retail investors?",
+      "priority": 10
+    },
+    {
+      "question": "What information do retail investors need before making private investments?",
+      "priority": 10
+    },
+    {
+      "question": "How should private investments be explained to non-professional investors?",
+      "priority": 10
+    },
+    {
+      "question": "What drives long-term engagement in investing platforms?",
+      "priority": 10
+    },
+    {
+      "question": "What causes investors to stop investing?",
+      "priority": 10
+    },
+    {
+      "question": "How should liquidity be incorporated into private-market products?",
+      "priority": 10
+    },
+    {
+      "question": "What regulatory changes could unlock retail participation?",
+      "priority": 10
+    },
+    {
+      "question": "What market inefficiencies remain unsolved in private markets?",
+      "priority": 10
+    },
+    {
+      "question": "How does gamification influence investing behavior?",
+      "priority": 9
+    },
+    {
+      "question": "How do incentive structures influence long-term investing behavior?",
+      "priority": 9
+    },
+    {
+      "question": "What is the math behind venture returns?",
+      "priority": 9
+    },
+    {
+      "question": "What is the typical founder perspective on secondary transactions?",
+      "priority": 9
+    },
+    {
+      "question": "How do venture capital firms participate in secondary markets?",
+      "priority": 9
+    },
+    {
+      "question": "How are secondary opportunities sourced and secured?",
+      "priority": 9
+    },
+    {
+      "question": "What changed in secondary markets after the 2021 venture cycle?",
+      "priority": 9
+    },
+    {
+      "question": "How do angels, micro-funds, and institutional investors differ in behavior?",
+      "priority": 9
+    },
+    {
+      "question": "What business models are emerging around private-market access?",
+      "priority": 9
+    },
+    {
+      "question": "What assumptions about private markets are widely accepted but actually incorrect?",
+      "priority": 9
+    },
+    {
+      "question": "How do referral loops drive viral growth?",
+      "priority": 8
+    },
+    {
+      "question": "How are venture capital markets evolving?",
+      "priority": 8
+    },
+    {
+      "question": "How does venture capital outperform public markets?",
+      "priority": 8
+    },
+    {
+      "question": "What return profile is required for a successful venture fund?",
+      "priority": 8
+    },
+    {
+      "question": "What parts of fundraising are unnecessarily inefficient?",
+      "priority": 8
+    },
+    {
+      "question": "How are micro-funds changing the venture ecosystem?",
+      "priority": 8
+    },
+    {
+      "question": "Are angel investors becoming more or less important?",
+      "priority": 8
+    },
+    {
+      "question": "What is the typical employee experience with secondary liquidity?",
+      "priority": 8
+    },
+    {
+      "question": "What cycles and patterns exist within secondary markets?",
+      "priority": 8
+    },
+    {
+      "question": "How do startups successfully leverage waitlists before launch?",
+      "priority": 7
+    },
+    {
+      "question": "How do community-led growth strategies scale?",
+      "priority": 7
+    },
+    {
+      "question": "How do financial platforms approach cybersecurity and resilience?",
+      "priority": 7
+    },
+    {
+      "question": "How do founders build influential brands through content?",
+      "priority": 7
+    },
+    {
+      "question": "How has venture fundraising changed over the last decade?",
+      "priority": 7
+    },
+    {
+      "question": "How is AI changing what gets funded?",
+      "priority": 7
+    },
+    {
+      "question": "How are syndicates affecting traditional venture funds?",
+      "priority": 7
+    },
+    {
+      "question": "What does a typical pre-seed diligence process look like?",
+      "priority": 6
+    },
+    {
+      "question": "How can investors identify companies that may only need to raise capital once?",
+      "priority": 6
+    },
+    {
+      "question": "Which alternative investment categories are seeing the most momentum?",
+      "priority": 6
+    },
+    {
+      "question": "What emerging trends are shaping fintech and investing?",
+      "priority": 5
+    },
+    {
+      "question": "How do macroeconomic conditions affect venture markets?",
+      "priority": 5
+    },
+    {
+      "question": "How do investors discover startups outside of San Francisco, New York, and Boston?",
+      "priority": 5
+    },
+    {
+      "question": "How will venture capital look different in ten years?",
+      "priority": 5
+    },
+    {
+      "question": "How can AI be applied to investing platforms?",
+      "priority": 4
+    },
+    {
+      "question": "How does time affect venture capital returns?",
+      "priority": 4
+    },
+    {
+      "question": "How will venture investors react if AI proves to be a bubble?",
+      "priority": 4
+    },
+    {
+      "question": "How does real estate serve as an investment entry point?",
+      "priority": 4
+    },
+    {
+      "question": "How do companies use regulatory differences as a competitive advantage?",
+      "priority": 3
+    },
+    {
+      "question": "What role will blockchain infrastructure play in financial services?",
+      "priority": 2
+    },
+    {
+      "question": "How will DeFi integrate with traditional financial systems?",
+      "priority": 1
+    }
+  ],
+  "topics": [
+    "Marketplace and network effects",
+    "Cold start and liquidity bootstrapping",
+    "Platform aggregation and blue ocean positioning",
+    "Distribution layer business models",
+    "Community-led and content-driven growth",
+    "Waitlist, hype, and pre-launch acquisition",
+    "Retail investor psychology and behavioral finance",
+    "Gamification guardrails and platform design",
+    "Financial education design",
+    "Product-market fit in retail investing",
+    "Fintech scaling and CAC efficiency",
+    "Liquidity risk and redemption design",
+    "NAV methodology and illiquid asset pricing",
+    "Minimum viable fund performance and pivot sequencing",
+    "Compliance as brand and trust signal",
+    "Vendor landscape and infrastructure partnerships",
+    "Competitor first-raise operational benchmarks",
+    "VC pitch dynamics for pre-revenue fintech",
+    "Deal sourcing without track record",
+    "Alternative asset accessibility and demand",
+    "Platform equity as community alignment",
+    "Influencer and creator program design",
+    "Retail investor protection trends",
+    "Exit timelines and venture portfolio benchmarks",
+    "Narrative hedging and growth story credibility"
+  ],
+  "connections": [
+    {
+      "name": "MIT",
+      "kind": "direct",
+      "active": true,
+      "callout": "MIT alum"
+    },
+    {
+      "name": "Sequoia Capital",
+      "kind": "indirect",
+      "active": true,
+      "callout": "Sequoia network"
+    }
+  ]
+}
