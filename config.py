@@ -17,6 +17,23 @@ Quick tour:
   5. SENDER_PROFILE             — a few lines about you, used to personalize emails.
 """
 
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()  # make .env values (API keys + Turso creds) available everywhere
+
+# ---------------------------------------------------------------------------
+# CLOUD STORAGE (Turso) — optional. When these two are set (in .env locally, or
+# in Streamlit Cloud → Secrets), the app stores EVERYTHING (contacts + settings)
+# in your Turso database, so nothing is ever lost to a server reset. When they're
+# absent, the app transparently falls back to the local SQLite file + settings.json.
+# Get them free at https://turso.tech (create a database, then a database token).
+# ---------------------------------------------------------------------------
+TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "").strip()
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
+USE_TURSO = bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
+
 # ---------------------------------------------------------------------------
 # 1. DEFAULT_TOPICS — starting broad areas of interest. People get tagged with
 #    the ones they fit. Editable in the app's Research-questions tab.
@@ -42,6 +59,9 @@ DEFAULT_TOPICS = [
 #
 #    Edit these in the app's "⚙️ Research questions" tab (recommended), or here.
 # ---------------------------------------------------------------------------
+DEFAULT_BIGGEST_QUESTIONS = []   # editable in-app; max 3 (see MAX_BIGGEST_QUESTIONS)
+MAX_BIGGEST_QUESTIONS = 3        # the "biggest questions" tier is hard-capped at 3
+
 DEFAULT_RESEARCH_QUESTIONS = [
     {"question": "How are EU and UK firms operationalizing MiCA and AML/KYC compliance in practice?",
      "priority": 3},

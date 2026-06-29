@@ -80,12 +80,30 @@ def channel_emoji(channel):
     return {"Email": "✉️", "LinkedIn DM": "in", "X DM": "𝕏"}.get(channel, "✉️")
 
 
-def channel_picker(key, default="Email"):
-    """A horizontal radio over the message channels. Returns the chosen channel."""
-    options = config.MESSAGE_CHANNELS
-    idx = options.index(default) if default in options else 0
-    return st.radio("Message channel", options, index=idx, horizontal=True,
-                    key=key, label_visibility="collapsed")
+def parse_channels(value):
+    """Split a stored message_channel string into an ordered, de-duped list."""
+    out = []
+    for part in (value or "").split(","):
+        ch = part.strip()
+        if ch in config.MESSAGE_CHANNELS and ch not in out:
+            out.append(ch)
+    return out
+
+
+def primary_channel(value):
+    """The first selected channel (the one we auto-draft for), or 'Email'."""
+    chans = parse_channels(value)
+    return chans[0] if chans else "Email"
+
+
+def split_draft(text):
+    """Split a draft into (subject, body). Handles DMs that have no subject line."""
+    lines = (text or "").splitlines()
+    if lines and lines[0].lower().startswith("subject:"):
+        subject = lines[0].split(":", 1)[1].strip()
+        body = "\n".join(lines[1:]).lstrip("\n")
+        return subject, body
+    return "", (text or "").strip()
 
 
 def set_status(eid, status):
@@ -134,7 +152,7 @@ with st.sidebar:
             log.code("\n".join(lines[-15:]))
         with st.spinner("Researching and writing briefs…"):
             n = enrich.enrich_all(progress=show)
-        st.success(f"Enriched {n} lead(s).")
+        st.success(f"Enriched {n} lead(s). See them in 👥 Browse & manage (newest first).")
 
     today = database.count_added_on()
     st.metric("Found today", f"{today} / {config.DAILY_LEAD_CAP}")
@@ -188,6 +206,8 @@ with tab_quick:
                 st.markdown(header)
                 st.write(f"**{person.get('title','')}** at **{person.get('company','')}** "
                          f"· {person.get('region','')} {person.get('country','')}")
+                if person.get("connection_note"):
+                    st.markdown(f"🔗 *{person['connection_note']}*")
                 if person.get("answers_questions"):
                     st.markdown(f"**Can help answer:** {person['answers_questions']}")
                 if person.get("outreach_channel") or person.get("meeting_location"):
@@ -200,14 +220,19 @@ with tab_quick:
                     with st.expander("10 questions to ask"):
                         st.text(person["draft_questions"])
 
-                st.caption("Respond via:")
-                qchannel = channel_picker(
-                    f"qchan_{eid}", default=person.get("message_channel") or "Email")
+                qchannels = st.multiselect(
+                    "Respond via", config.MESSAGE_CHANNELS,
+                    default=parse_channels(person.get("message_channel")) or ["Email"],
+                    key=f"qchan_{eid}",
+                    help="Pick one or more. The auto-draft uses the first one; you can "
+                         "draft the others later in Browse & manage.")
                 b1, b2, _ = st.columns([1, 1, 4])
                 with b1:
                     if st.button("🚩 Flag", key=f"flag_{eid}", use_container_width=True):
-                        flag_and_draft(eid, channel=qchannel)
-                        st.toast(f"Flagged {person['name']} — {qchannel} draft ready.")
+                        chans = qchannels or ["Email"]
+                        database.update_fields(eid, message_channel=", ".join(chans))
+                        flag_and_draft(eid, channel=chans[0])
+                        st.toast(f"Flagged {person['name']} — {chans[0]} draft ready.")
                         st.rerun()
                 with b2:
                     if st.button("👎 Skip", key=f"skip_{eid}", use_container_width=True):
@@ -326,10 +351,16 @@ with tab_browse:
     if experts:
         table = pd.DataFrame(experts)[
             ["id", "name", "title", "company", "company_size", "region",
-             "education_flag", "connection_flag", "message_channel", "email_source",
-             "status", "outreach_channel", "flagged"]
+             "topics", "answers_questions", "education_flag", "connection_flag",
+             "message_channel", "email_source", "status", "outreach_channel", "flagged"]
         ]
-        st.dataframe(table, use_container_width=True, hide_index=True)
+        st.dataframe(
+            table, use_container_width=True, hide_index=True,
+            column_config={
+                "topics": st.column_config.TextColumn("Topics", width="medium"),
+                "answers_questions": st.column_config.TextColumn("Can help answer", width="large"),
+            },
+        )
 
         # ---- Detail / actions for one person ---- #
         st.divider()
@@ -352,8 +383,18 @@ with tab_browse:
                          f"({person.get('company_size','?')})")
                 st.write(f"📍 {person.get('region','')} {person.get('country','')}  "
                          f"·  ✉️ **{person.get('message_channel') or 'Email'}**")
+                if person.get("connection_note"):
+                    st.markdown(f"🔗 *{person['connection_note']}*")
+            if not person.get("summary"):
+                st.info("This lead isn't enriched yet — no summary, topics, or interview "
+                        "questions. Enrich it to fill in that detail.")
+                if st.button("✨ Enrich this lead", key=f"enrich_{eid}"):
+                    with st.spinner("Researching and writing a brief…"):
+                        enrich.enrich_one(person)
+                    st.success("Enriched.")
+                    st.rerun()
             if person.get("summary"):
-                st.markdown("**Summary**")
+                st.markdown("**Why talk to them**")
                 st.write(person["summary"])
             if person.get("topics"):
                 st.markdown(f"**Topics:** {person['topics']}")
@@ -367,8 +408,8 @@ with tab_browse:
             if person.get("notes"):
                 st.markdown(f"**Notes:** {person['notes']}")
             if person.get("draft_questions"):
-                st.markdown("**Questions to ask them**")
-                st.text(person["draft_questions"])
+                with st.expander("🔟 10 questions to ask"):
+                    st.text(person["draft_questions"])
 
         with right:
             st.markdown("**Contact**")
@@ -381,15 +422,17 @@ with tab_browse:
             if not person.get("email") and not person.get("linkedin_url"):
                 st.caption("No public contact found.")
 
-            cur_channel = person.get("message_channel") or "Email"
-            st.markdown("**Message channel**")
-            st.caption(f"Currently: **{cur_channel}** — click to change:")
-            mc1, mc2, mc3 = st.columns(3)
-            for col, ch in zip((mc1, mc2, mc3), config.MESSAGE_CHANNELS):
-                label = ("● " if ch == cur_channel else "") + ch
-                if col.button(label, key=f"mc_{eid}_{ch}", use_container_width=True):
-                    database.update_fields(eid, message_channel=ch)
-                    st.rerun()
+            st.markdown("**Message channel(s)**")
+            sel_channels = st.multiselect(
+                "Channels", config.MESSAGE_CHANNELS,
+                default=parse_channels(person.get("message_channel")),
+                key=f"mc_{eid}", label_visibility="collapsed",
+                help="Track every channel you'll use for this lead. The first one is "
+                     "the primary (used by the auto-draft).")
+            if st.button("💾 Save channels", key=f"mcsave_{eid}", use_container_width=True):
+                database.update_fields(eid, message_channel=", ".join(sel_channels))
+                st.toast("Channels saved.")
+                st.rerun()
 
             st.markdown("**Actions**")
             flagged = bool(person.get("flagged"))
@@ -399,7 +442,8 @@ with tab_browse:
                     st.rerun()
             else:
                 if st.button("🚩 Flag for outreach", use_container_width=True):
-                    flag_and_draft(eid, channel=cur_channel)  # auto-drafts
+                    # auto-draft for the lead's primary (first) channel
+                    flag_and_draft(eid, channel=primary_channel(person.get("message_channel")))
                     st.rerun()
 
             new_status = st.selectbox(
@@ -453,12 +497,24 @@ with tab_browse:
                     ed_time = st.text_input("Meeting time",
                                             value=person.get("meeting_time") or "")
                     ed_notes = st.text_area("Notes", value=person.get("notes") or "", height=80)
+
+                st.markdown("**Enriched details** (from the AI — edit freely)")
+                ed_summary = st.text_area("Summary", value=person.get("summary") or "", height=80)
+                ed_topics = st.text_input("Topics", value=person.get("topics") or "")
+                ed_answers = st.text_input("Can help answer",
+                                           value=person.get("answers_questions") or "")
+                ed_connnote = st.text_input("🔗 Connection note (how they link to a target)",
+                                            value=person.get("connection_note") or "")
+                ed_questions = st.text_area("Questions to ask them",
+                                            value=person.get("draft_questions") or "", height=160)
                 if st.form_submit_button("💾 Save changes", type="primary"):
                     database.update_fields(
                         eid, title=ed_title, company=ed_company, company_size=ed_size,
                         region=ed_region, country=ed_state, email=ed_email or None,
                         linkedin_url=ed_linkedin, status=ed_status, outreach_channel=ed_channel,
                         meeting_location=ed_location, meeting_time=ed_time, notes=ed_notes,
+                        summary=ed_summary, topics=ed_topics, answers_questions=ed_answers,
+                        connection_note=ed_connnote, draft_questions=ed_questions,
                     )
                     if ed_status in ("Replied", "Meeting scheduled"):
                         database.mark_email_replied(eid)
@@ -476,9 +532,9 @@ with tab_browse:
         with dc1:
             draft_channel = st.selectbox(
                 "Channel", config.MESSAGE_CHANNELS,
-                index=config.MESSAGE_CHANNELS.index(person.get("message_channel") or "Email")
-                if (person.get("message_channel") or "Email") in config.MESSAGE_CHANNELS else 0,
-                help="Email = subject + body; DMs are shorter with no subject line.")
+                index=config.MESSAGE_CHANNELS.index(primary_channel(person.get("message_channel"))),
+                help="Which channel to write this draft for. Email = subject + body; "
+                     "DMs are shorter with no subject line.")
         with dc2:
             pick = st.selectbox("Template", ["(auto — AI picks)"] + tmpl_names,
                                 help="Auto lets the AI choose the best fit; or force a specific one.")
@@ -513,6 +569,22 @@ with tab_browse:
                     database.update_fields(eid, outreach_channel="Email")
                 st.success(f"Logged & marked Contacted — subject: “{subject}”")
                 st.rerun()
+
+        # ---- Save this edited draft as a reusable template ---- #
+        st.caption("Like how this turned out? Save it as a reusable template.")
+        t1, t2 = st.columns([3, 1])
+        with t1:
+            tmpl_name = st.text_input(
+                "Template name", value=f"Draft from {person.get('name', 'lead')}",
+                key=f"tmplname_{eid}", label_visibility="collapsed")
+        with t2:
+            if st.button("💾 Save as template", use_container_width=True):
+                subj, body = split_draft(edited)
+                templates = store.get_templates()
+                templates.append({"name": (tmpl_name or "Untitled").strip(),
+                                  "subject": subj, "body": body})
+                store.set_templates(templates)
+                st.success(f"Saved template “{tmpl_name}”. Find it in the ✉️ Templates tab.")
     else:
         st.info("No leads match these filters yet. Use the sidebar to find some.")
 
@@ -654,6 +726,34 @@ with tab_settings:
     if int(arch_hours) != store.get_archive_hours():
         store.set_archive_hours(int(arch_hours))
         st.toast(f"Archive window set to {int(arch_hours)} hours.")
+
+    st.divider()
+    st.subheader("⭐ Biggest questions")
+    st.caption(
+        f"Your **top {config.MAX_BIGGEST_QUESTIONS} questions** — these get the "
+        "heaviest discovery weight. For each, write the question, then use the notes "
+        "box to think out loud about **who** you want to talk to, **what level** "
+        "(seniority/role), and the **approaches/considerations** you want to explore. "
+        "The agent uses those notes to shape exactly who it looks for."
+    )
+    existing_bq = store.get_biggest_questions()
+    bq_inputs = []
+    for i in range(config.MAX_BIGGEST_QUESTIONS):
+        cur = existing_bq[i] if i < len(existing_bq) else {"question": "", "notes": ""}
+        with st.container(border=True):
+            q_text = st.text_input(
+                f"Biggest question #{i + 1}", value=cur.get("question", ""),
+                key=f"bq_q_{i}", placeholder="e.g. What would unlock retail access to private markets?")
+            q_notes = st.text_area(
+                "Who / level / approaches / considerations",
+                value=cur.get("notes", ""), key=f"bq_n_{i}", height=120,
+                placeholder="Free-flowing thoughts: the kind of person, their seniority, "
+                            "multiple angles you want to explore, what a great conversation covers…")
+            bq_inputs.append({"question": q_text, "notes": q_notes})
+    if st.button("💾 Save biggest questions", type="primary"):
+        saved = store.set_biggest_questions(bq_inputs)
+        st.success(f"Saved {len(saved)} biggest question(s).")
+        st.rerun()
 
     st.divider()
     st.subheader("Research questions")

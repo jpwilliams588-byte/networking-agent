@@ -15,11 +15,18 @@ import json
 import os
 
 import config
+import database
 
 SETTINGS_PATH = "settings.json"
 
 
 def _load():
+    """Read all settings — from Turso when cloud storage is on, else settings.json."""
+    if config.USE_TURSO:
+        try:
+            return database.get_all_settings()
+        except Exception:
+            return {}
     if os.path.exists(SETTINGS_PATH):
         try:
             with open(SETTINGS_PATH, encoding="utf-8") as f:
@@ -30,6 +37,11 @@ def _load():
 
 
 def _save(data):
+    """Persist settings — to Turso when cloud storage is on, else settings.json."""
+    if config.USE_TURSO:
+        for key, value in data.items():
+            database.set_setting(key, value)
+        return
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -57,6 +69,32 @@ def set_research_questions(questions):
         clean.append({"question": text, "priority": max(1, priority)})
     data = _load()
     data["research_questions"] = clean
+    _save(data)
+    return clean
+
+
+# ---- Biggest questions (top-tier, max 3) ---------------------------------- #
+def get_biggest_questions():
+    """The up-to-3 highest-priority questions as [{"question", "notes"}]."""
+    bq = _load().get("biggest_questions")
+    if not bq:
+        return [dict(q) for q in config.DEFAULT_BIGGEST_QUESTIONS]
+    return [{"question": (q.get("question") or "").strip(),
+             "notes": (q.get("notes") or "").strip()} for q in bq]
+
+
+def set_biggest_questions(questions):
+    """Validate + save the biggest questions (drops empties, hard-caps at 3)."""
+    clean = []
+    for q in questions:
+        text = (q.get("question") or "").strip()
+        if not text:
+            continue
+        clean.append({"question": text, "notes": (q.get("notes") or "").strip()})
+        if len(clean) >= config.MAX_BIGGEST_QUESTIONS:
+            break
+    data = _load()
+    data["biggest_questions"] = clean
     _save(data)
     return clean
 

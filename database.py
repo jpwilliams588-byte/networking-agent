@@ -9,6 +9,7 @@ The functions here create the table, add people (without creating duplicates),
 read them back with filters, and update their status / flag / email draft.
 """
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -21,17 +22,84 @@ COLUMNS = [
     "name", "title", "company", "company_size", "region", "country",
     "industry", "vertical", "email", "email_source", "linkedin_url",
     "photo_url", "topics", "answers_questions", "summary", "draft_questions",
-    "education_flag", "connection_flag", "status", "flagged", "email_draft", "draft_template",
+    "education_flag", "connection_flag", "connection_note", "status", "flagged",
+    "email_draft", "draft_template",
     "source_url", "discovered_on", "outreach_channel", "message_channel",
     "meeting_location", "meeting_time", "notes",
 ]
 
 
+# --------------------------------------------------------------------------- #
+# Backend-agnostic connection layer.
+#
+# The whole app talks SQLite. When Turso (cloud SQLite) credentials are present,
+# we connect there instead so data survives server resets; otherwise we use the
+# local file. The tiny wrappers below make BOTH backends return rows as plain
+# dicts, so every query in this file works unchanged regardless of where the
+# data actually lives.
+# --------------------------------------------------------------------------- #
+class _Result:
+    """Uniform query result: rows as dicts, iterable, with fetchone/fetchall."""
+    def __init__(self, description, rows, rowcount=-1, lastrowid=None):
+        cols = [d[0] for d in description] if description else []
+        self._rows = [dict(zip(cols, r)) for r in rows] if cols else []
+        self.rowcount = rowcount
+        self.lastrowid = lastrowid
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return self._rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class _Conn:
+    """Thin wrapper over a raw sqlite3/libsql connection that returns _Results."""
+    def __init__(self, raw):
+        self._raw = raw
+
+    def execute(self, sql, params=()):
+        cur = self._raw.execute(sql, tuple(params))
+        description = getattr(cur, "description", None)
+        rows = cur.fetchall() if description else []
+        return _Result(description, rows,
+                       rowcount=getattr(cur, "rowcount", -1),
+                       lastrowid=getattr(cur, "lastrowid", None))
+
+    def executemany(self, sql, seq):
+        self._raw.executemany(sql, [tuple(p) for p in seq])
+
+    def commit(self):
+        try:
+            self._raw.commit()
+        except Exception:
+            pass
+
+    def close(self):
+        try:
+            self._raw.close()
+        except Exception:
+            pass
+
+
+def _raw_connection():
+    """Open a raw connection to Turso (if configured) or the local SQLite file."""
+    if config.USE_TURSO:
+        import libsql  # lazy: only needed when cloud storage is on
+        return libsql.connect(
+            database=config.TURSO_DATABASE_URL,
+            auth_token=config.TURSO_AUTH_TOKEN,
+        )
+    return sqlite3.connect(config.DB_PATH)
+
+
 @contextmanager
 def _conn():
-    """Open the database, hand back a connection, and always close it."""
-    con = sqlite3.connect(config.DB_PATH)
-    con.row_factory = sqlite3.Row  # lets us read rows like dictionaries
+    """Open the database, hand back a dict-returning connection, always close it."""
+    con = _Conn(_raw_connection())
     try:
         yield con
         con.commit()
@@ -64,6 +132,7 @@ def init_db():
                 draft_questions  TEXT,
                 education_flag   TEXT,
                 connection_flag  TEXT,
+                connection_note  TEXT,
                 status           TEXT DEFAULT 'Found',
                 flagged          INTEGER DEFAULT 0,
                 email_draft      TEXT,
@@ -90,14 +159,22 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS idx_name_company ON experts(name, company)"
         )
         # Migration guard: add any newer columns to databases created earlier.
+        # Wrapped in try/except so it's safe on both SQLite and libSQL even if the
+        # column already exists (a fresh table already has all of them).
         existing = {row["name"] for row in con.execute("PRAGMA table_info(experts)")}
-        for col in ("photo_url", "education_flag", "connection_flag",
+        for col in ("photo_url", "education_flag", "connection_flag", "connection_note",
                     "outreach_channel", "message_channel", "meeting_location",
                     "meeting_time", "notes", "draft_template", "archived_at"):
             if col not in existing:
-                con.execute(f"ALTER TABLE experts ADD COLUMN {col} TEXT")
+                try:
+                    con.execute(f"ALTER TABLE experts ADD COLUMN {col} TEXT")
+                except Exception:
+                    pass  # column already exists
         if "archived" not in existing:
-            con.execute("ALTER TABLE experts ADD COLUMN archived INTEGER DEFAULT 0")
+            try:
+                con.execute("ALTER TABLE experts ADD COLUMN archived INTEGER DEFAULT 0")
+            except Exception:
+                pass
 
         # Log of emails you've sent — powers the A/B testing view.
         con.execute(
@@ -113,6 +190,46 @@ def init_db():
                 replied_at   TEXT
             )
             """
+        )
+
+        # Key/value store for app settings (research questions, topics, etc.).
+        # Used in place of settings.json when cloud storage (Turso) is on, so your
+        # in-app edits also survive a server reset.
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """
+        )
+
+
+# --------------------------------------------------------------------------- #
+# App settings (key/value) — backs store.py when Turso is enabled.
+# --------------------------------------------------------------------------- #
+def get_all_settings():
+    """Return every saved setting as {key: decoded_value}."""
+    init_db()
+    out = {}
+    with _conn() as con:
+        for r in con.execute("SELECT key, value FROM app_settings"):
+            raw = r["value"]
+            try:
+                out[r["key"]] = json.loads(raw)
+            except (TypeError, ValueError):
+                out[r["key"]] = raw
+    return out
+
+
+def set_setting(key, value):
+    """Upsert one setting (value is JSON-encoded)."""
+    payload = json.dumps(value, ensure_ascii=False)
+    with _conn() as con:
+        con.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, payload),
         )
 
 
@@ -218,7 +335,7 @@ def get_experts(status=None, flagged=None, region=None, company_size=None,
     if connection_like:
         clauses.append("connection_flag LIKE ?"); params.append(f"%{connection_like}%")
     if message_channel:
-        clauses.append("message_channel = ?"); params.append(message_channel)
+        clauses.append("message_channel LIKE ?"); params.append(f"%{message_channel}%")
 
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with _conn() as con:
@@ -327,14 +444,15 @@ def archive_stale(max_hours):
     cutoff = (datetime.now() - timedelta(hours=max(1, int(max_hours)))).isoformat(timespec="seconds")
     now = datetime.now().isoformat(timespec="seconds")
     with _conn() as con:
-        cur = con.execute(
+        con.execute(
             "UPDATE experts SET archived = 1, archived_at = ? "
             "WHERE (archived = 0 OR archived IS NULL) "
             "AND (flagged = 0 OR flagged IS NULL) "
             "AND status IN ('Found', 'Reviewed') AND created_at < ?",
             (now, cutoff),
         )
-        return cur.rowcount
+        # changes() is reliable on both sqlite3 and libsql (rowcount is not).
+        return con.execute("SELECT changes() AS n").fetchone()["n"]
 
 
 # --------------------------------------------------------------------------- #

@@ -58,12 +58,34 @@ _PEOPLE_SCHEMA = {
 }
 
 
+def _combined_questions():
+    """
+    The full discovery question list: the up-to-3 "biggest questions" first (at
+    the heaviest weight, carrying their free-flowing `notes`), then the regular
+    research questions. Notes shape who the agent looks for.
+    """
+    regular = store.get_research_questions()
+    biggest = store.get_biggest_questions()
+    max_reg = max((q.get("priority", 1) for q in regular), default=1)
+    combined = []
+    for b in biggest:
+        if b.get("question"):
+            combined.append({
+                "question": b["question"],
+                "priority": max(1, max_reg) * 3,  # heaviest weight
+                "notes": b.get("notes", ""),
+                "biggest": True,
+            })
+    combined.extend(regular)
+    return combined
+
+
 def allocate_budget(total):
     """
-    Split `total` leads across the research questions in proportion to priority.
-    Returns a list of (question_dict, count) with counts summing to `total`.
+    Split `total` leads across the questions in proportion to priority (biggest
+    questions included, at top weight). Returns [(question_dict, count), ...].
     """
-    questions = store.get_research_questions()
+    questions = _combined_questions()
     if not questions or total <= 0:
         return []
     weight_sum = sum(max(0, q.get("priority", 1)) for q in questions) or len(questions)
@@ -156,11 +178,22 @@ def _connection_guidance(connections):
     )
 
 
-def build_queries(question_text, target):
+def _notes_phrase(notes):
+    """Condense a biggest-question's free-flowing notes into a short query hint."""
+    notes = (notes or "").strip()
+    if not notes:
+        return ""
+    # Keep it short so the search query stays focused.
+    snippet = " ".join(notes.split())[:160]
+    return f" Ideal person: {snippet}"
+
+
+def build_queries(question_text, target, notes=None):
     """
-    Build a handful of diverse search queries for one research question, biased
-    toward the geographies and company sizes we currently have the fewest of, and
-    toward our active warm-intro connections when any are set.
+    Build a handful of diverse search queries for one question, biased toward the
+    geographies and company sizes we currently have the fewest of, our active
+    warm-intro connections, and (for a "biggest question") the free-flowing notes
+    describing the ideal person/level/approach.
     """
     regions = _least_covered_first(config.TARGET_REGIONS, database.region_distribution())
     sizes = _least_covered_first(config.COMPANY_SIZES, database.size_distribution())
@@ -168,6 +201,7 @@ def build_queries(question_text, target):
     random.shuffle(seniorities)  # vary which seniorities lead, run to run
 
     connections = store.active_connections()
+    notes_hint = _notes_phrase(notes)
 
     # Roughly one query per ~3 desired leads, but at least 2 and at most 10.
     num_queries = max(2, min(10, math.ceil(target / 3)))
@@ -184,6 +218,7 @@ def build_queries(question_text, target):
         if connections:
             conn = connections[i % len(connections)]
             query += f" {_connection_phrase(conn)}."
+        query += notes_hint
         query += " LinkedIn profile."
         queries.append(query)
     return queries
@@ -212,7 +247,7 @@ def _results_to_text(results):
     return "\n".join(chunks)
 
 
-def extract_people(question_text, results, target):
+def extract_people(question_text, results, target, notes=None):
     """Use Claude to pull real, diverse individuals out of the search results."""
     if not results:
         return []
@@ -232,8 +267,15 @@ def extract_people(question_text, results, target):
         + ". Put the specific US state (e.g. 'California') in 'country'."
         + _connection_guidance(store.active_connections())
     )
+    ideal = ""
+    if (notes or "").strip():
+        ideal = (
+            "\n\nIDEAL PERSON / APPROACH for this question (prioritize people who fit "
+            "this — the kind of person, seniority/level, and angle described):\n"
+            + notes.strip()
+        )
     user = (
-        f"Research question we want answered:\n{question_text}\n\n"
+        f"Research question we want answered:\n{question_text}{ideal}\n\n"
         f"Find up to {target * 2} distinct people who could credibly help answer "
         f"it, from these search results:\n\n{_results_to_text(results)}"
     )
@@ -263,18 +305,20 @@ def discover(max_new=None, progress=None):
         if added >= headroom:
             break
         qtext = question["question"]
+        notes = question.get("notes", "")
         if progress:
-            progress(f"Searching for ~{target} leads on: {qtext[:60]}…")
+            tag = "⭐ biggest — " if question.get("biggest") else ""
+            progress(f"Searching for ~{target} leads on: {tag}{qtext[:60]}…")
 
         results = []
-        for query in build_queries(qtext, target):
+        for query in build_queries(qtext, target, notes=notes):
             try:
                 results.extend(_search(query))
             except Exception as e:  # one bad query shouldn't kill the run
                 if progress:
                     progress(f"  (search issue, skipping one query: {e})")
 
-        people = extract_people(qtext, results, target)
+        people = extract_people(qtext, results, target, notes=notes)
         for person in people:
             if added >= headroom:
                 break

@@ -74,7 +74,12 @@ def draft_outreach(expert_id, template_name=None, channel=None, save=True):
     if not expert:
         raise ValueError(f"No expert with id {expert_id}")
 
-    channel = channel or expert.get("message_channel") or "Email"
+    if not channel:
+        # Default to the lead's PRIMARY (first) channel; message_channel may now hold
+        # a comma-joined list of channels.
+        first = next((c.strip() for c in (expert.get("message_channel") or "").split(",")
+                      if c.strip() in config.MESSAGE_CHANNELS), "")
+        channel = first or "Email"
     if channel not in config.MESSAGE_CHANNELS:
         channel = "Email"
     is_dm = channel in ("LinkedIn DM", "X DM")
@@ -138,8 +143,9 @@ def draft_outreach(expert_id, template_name=None, channel=None, save=True):
         chosen = ""
 
     if save:
-        database.update_fields(expert_id, email_draft=draft, draft_template=chosen,
-                               message_channel=channel)
+        # Note: message_channel is owned by the UI (it can be a multi-channel list),
+        # so we don't overwrite it here — only the draft + which template was used.
+        database.update_fields(expert_id, email_draft=draft, draft_template=chosen)
     return draft, chosen
 
 

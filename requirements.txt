@@ -3,3 +3,4 @@ anthropic
 tavily-python
 python-dotenv
 pandas
+libsql

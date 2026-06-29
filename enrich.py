@@ -43,9 +43,10 @@ _LEAD_SCHEMA = {
             "enum": ["", "MIT Sloan", "MIT (undergrad)", "MIT Sloan; MIT (undergrad)"],
         },
         "connection_flag": {"type": "string"},
+        "connection_note": {"type": "string"},
     },
     "required": ["summary", "topics", "answers_questions", "questions",
-                 "education_flag", "connection_flag"],
+                 "education_flag", "connection_flag", "connection_note"],
 }
 
 
@@ -179,13 +180,26 @@ def _generate_package(expert, results):
                     f"the person personally shares this attribute (e.g. attended/worked "
                     f"at {c['name']})."
                 )
+        has_indirect = any(c.get("kind") == "indirect" for c in connections)
         system += (
             "\nSet 'connection_flag' to the matching warm-intro connection callout(s), "
             "joined by '; ', ONLY on clear evidence (never guess); use an empty string "
             "if none apply. Connections:\n" + "\n".join(conn_lines)
         )
+        if has_indirect:
+            system += (
+                "\nWhen you set 'connection_flag' for an INDIRECT connection, also set "
+                "'connection_note' to ONE short, grounded sentence explaining HOW this "
+                "person is linked to that target (their role, dates, and the nature of "
+                "the relationship — e.g. 'Former analyst at Sequoia, 2019–2021' or "
+                "'Founder of a Sequoia-backed company'). Otherwise set 'connection_note' "
+                "to an empty string. Never speculate beyond the evidence."
+            )
+        else:
+            system += "\nSet 'connection_note' to an empty string."
     else:
-        system += "\nSet 'connection_flag' to an empty string."
+        system += ("\nSet 'connection_flag' to an empty string and 'connection_note' "
+                   "to an empty string.")
     user = (
         f"PERSON:\n"
         f"Name: {expert.get('name')}\n"
@@ -249,6 +263,8 @@ def enrich_one(expert, progress=None):
         education_flag=pkg.get("education_flag", ""),
         connection_flag=pkg.get("connection_flag", "")
                         or expert.get("connection_flag", ""),
+        connection_note=pkg.get("connection_note", "")
+                        or expert.get("connection_note", ""),
         status="Reviewed",
     )
     if progress:
